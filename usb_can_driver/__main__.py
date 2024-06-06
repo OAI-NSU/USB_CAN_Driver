@@ -2,8 +2,8 @@
 
 import time
 from loguru import logger
-from lm_usb_can.canv_structs import IVar
-from lm_usb_can.usb_can import LM_USB_CAN
+from usb_can_driver.canv_structs import IVar
+from usb_can_driver.usb_can import LM_USB_CAN
 
 
 if __name__ == '__main__':

@@ -5,7 +5,7 @@ from loguru import logger
 from serial import Serial
 import struct
 
-from lm_usb_can.canv_structs import CAN_Transaction, IVar, CMD_Type
+from usb_can_driver.canv_structs import CAN_Transaction, IVar, CMD_Type
 
 
 
