@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "lm-usb-can"
+name = "usb-can-driver"
 version = "0.1.0"
 description = ""
 authors = ["CrinitusFeles <crinitusfeles@gmail.com>"]
