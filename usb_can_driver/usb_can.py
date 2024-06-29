@@ -2,7 +2,7 @@ from queue import Empty, Queue
 from threading import Thread
 import time
 from loguru import logger
-from serial import Serial
+from serial import Serial, SerialException
 import struct
 
 from usb_can_driver.canv_structs import CAN_Transaction, IVar, CMD_Type
@@ -108,9 +108,18 @@ class LM_USB_CAN:
                     else:
                         logger.warning('Incorrect data len')
             except Empty:
-                rx_data: bytes | None = self._ser.read_all()
+                try:
+                    rx_data: bytes | None = self._ser.read_all()
+                except SerialException as err:
+                    logger.error(err)
+                    logger.info('Please restart app')
+                    return None
                 if rx_data:
                     logger.debug(f'got unexpected data: {rx_data.hex(" ").upper()}')
+            except SerialException as err:
+                logger.error(err)
+                logger.info('Please restart app')
+                return None
             time.sleep(0.001)
 
     def _cli_routine(self) -> None:
