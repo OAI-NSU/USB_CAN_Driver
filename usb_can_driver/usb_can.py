@@ -1,6 +1,7 @@
 from queue import Empty, Queue
 from threading import Thread
 import time
+from typing import Callable
 from loguru import logger
 from serial import Serial, SerialException
 import struct
@@ -17,11 +18,12 @@ class LM_USB_CAN:
         self._working_flag: bool = True
         self._thread: Thread
         self.pkt_counter = 0
+        self.on_received: Callable[..., bytes] | None = None
 
     def connect(self, port: str) -> bool:
         if hasattr(self, '_ser') and self._ser.is_open:
             return True
-        self._ser = Serial(port, 115200, write_timeout=2, timeout=0.5)
+        self._ser = Serial(port, 115200, write_timeout=2, timeout=0.2)
         self.connection_status = self._ser.is_open
         self._thread = Thread(name='USB_CAN_thread', target=self._routine,
                               daemon=True)
@@ -86,7 +88,7 @@ class LM_USB_CAN:
         while self._working_flag:
             try:
                 next_cmd: CAN_Transaction = self._queue.get_nowait()
-                logger.debug('Sending:')
+                logger.debug(f'Sending: {next_cmd}')
                 buffer: bytes = b''
                 for packet in next_cmd.packets:
                     self._ser.write(packet)
@@ -104,6 +106,8 @@ class LM_USB_CAN:
                 if buffer:
                     if len(buffer) == next_cmd.d_len:
                         self.pkt_counter += 1
+                        if self.on_received:
+                            self.on_received(buffer)
                         logger.debug(buffer.hex(" ").upper())
                     else:
                         logger.warning('Incorrect data len')
@@ -120,7 +124,7 @@ class LM_USB_CAN:
                 logger.error(err)
                 logger.info('Please restart app')
                 return None
-            time.sleep(0.001)
+            # time.sleep(0.001)
 
     def _cli_routine(self) -> None:
         while self._working_flag:
