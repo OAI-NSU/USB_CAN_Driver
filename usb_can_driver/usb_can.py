@@ -18,7 +18,7 @@ class LM_USB_CAN:
         self._working_flag: bool = True
         self._thread: Thread
         self.pkt_counter = 0
-        self.on_received: Callable[..., bytes] | None = None
+        self.on_received: Callable[..., None] | None = None
 
     def connect(self, port: str) -> bool:
         if hasattr(self, '_ser') and self._ser.is_open:
