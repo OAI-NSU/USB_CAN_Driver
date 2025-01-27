@@ -1,54 +1,28 @@
-from queue import Empty, Queue
-from threading import Thread
+import asyncio
 import time
-from typing import Callable
-from loguru import logger
-from serial import Serial, SerialException
+from serial_client import AioSerialClient
 import struct
 
-from usb_can_driver.canv_structs import CAN_Transaction, IVar, CMD_Type
+from usb_can_driver.canv_structs import CAN_Transaction, IVar
 
 
-
-class LM_USB_CAN:
+class USB_CAN_Driver:
     def __init__(self) -> None:
-        self._ser: Serial
-        self.connection_status: bool = False
-        self._queue: Queue[CAN_Transaction] = Queue()
-        self._working_flag: bool = True
-        self._thread: Thread
-        self.pkt_counter = 0
-        self.on_received: Callable[..., None] | None = None
+        self._ser = AioSerialClient()
 
     def connect(self, port: str) -> bool:
-        if hasattr(self, '_ser') and self._ser.is_open:
-            return True
-        self._ser = Serial(port, 115200, write_timeout=2, timeout=0.2)
-        self.connection_status = self._ser.is_open
-        self._thread = Thread(name='USB_CAN_thread', target=self._routine,
-                              daemon=True)
-        self._thread.start()
-        return self.connection_status
+        return self._ser.connect(port)
 
     def disconnect(self) -> None:
-        if hasattr(self, '_ser') and not self._ser.is_open:
-            return None
-        self._working_flag = False
-        self._thread.join(2)
-        self.connection_status = False
-
-    def cli(self) -> None:
-        self._cli_thread = Thread(name='CLI', target=self._cli_routine,
-                            daemon=True)
-        self._cli_thread.start()
+        return self._ser.disconnect()
 
     @staticmethod
     def _read(ivar: IVar, d_len: int, can_num: int) -> CAN_Transaction:
-        cmd: CAN_Transaction = CAN_Transaction(ivar, [], CMD_Type.READ, d_len)
+        cmd: CAN_Transaction = CAN_Transaction(ivar, [], d_len)
         offset: int = ivar.offset
         while d_len > 0:
             packet: bytes = struct.pack('<bb', can_num, 0)
-            packet += ivar.to_bytes(CMD_Type.READ)
+            packet += ivar.to_bytes(True)
             packet += struct.pack('<H', 8 if d_len > 8 else d_len)
             cmd.packets.append(packet)
             ivar.offset += 8
@@ -56,21 +30,19 @@ class LM_USB_CAN:
         ivar.offset = offset
         return cmd
 
-    def read(self, ivar: IVar, d_len: int = 0,
-             can_num: int = 0) -> CAN_Transaction:
+    async def read(self, ivar: IVar, d_len: int = 0,
+                   can_num: int = 0) -> bytes:
         cmd: CAN_Transaction = self._read(ivar, d_len, can_num)
-        self._queue.put_nowait(cmd)
-        return cmd
+        return await self._transaction(cmd)
 
     @staticmethod
     def _write(ivar: IVar, data: bytes, can_num: int) -> CAN_Transaction:
-        cmd: CAN_Transaction = CAN_Transaction(ivar, [], CMD_Type.WRITE,
-                                               data=data)
+        cmd: CAN_Transaction = CAN_Transaction(ivar, [], data=data)
         chunks: list[bytes] = [data[i: i + 8] for i in range(0, len(data), 8)]
         offset: int = ivar.offset
         for chunk in chunks:
             packet: bytes = struct.pack('<bb', can_num, 0)
-            packet += ivar.to_bytes(CMD_Type.WRITE)
+            packet += ivar.to_bytes()
             packet += struct.pack('<H', len(chunk))
             packet += chunk
             cmd.packets.append(packet)
@@ -78,59 +50,28 @@ class LM_USB_CAN:
         ivar.offset = offset
         return cmd
 
-    def write(self, ivar: IVar, data: bytes = b'',
-              can_num: int = 0) -> CAN_Transaction:
-        packets: CAN_Transaction = self._write(ivar, data, can_num)
-        self._queue.put_nowait(packets)
-        return packets
+    async def _transaction(self, cmd: CAN_Transaction) -> bytes:
+        rx_data: bytes = b''
+        for packet in cmd.packets:
+            result: bytes = await self._ser.transaction(packet, 16, 1)
+            rx_data += result[8:]
+            # await asyncio.sleep(0.0001)
+        return rx_data
 
-    def _routine(self) -> None:
-        while self._working_flag:
-            try:
-                next_cmd: CAN_Transaction = self._queue.get_nowait()
-                logger.debug(f'Sending: {next_cmd}')
-                buffer: bytes = b''
-                for packet in next_cmd.packets:
-                    self._ser.write(packet)
-                    logger.debug(f'Packet type: {next_cmd.cmd_type}\n'\
-                                 f'Data: {packet.hex(" ", 2).upper()}')
-                    rx_data: bytes | None = self._ser.read(16)
+    async def write(self, ivar: IVar, data: bytes = b'',
+              can_num: int = 0) -> bytes:
+        cmd: CAN_Transaction = self._write(ivar, data, can_num)
+        return await self._transaction(cmd)
 
-                    if next_cmd.cmd_type == CMD_Type.READ:
-                        if rx_data:
-                            buffer += rx_data[8:]
-                            logger.info(rx_data.hex(" ", 2).upper())
 
-                        else:
-                            logger.error(f'Timeout for packet: {packet.hex(" ", 2).upper()}')
-                if buffer:
-                    if len(buffer) == next_cmd.d_len:
-                        self.pkt_counter += 1
-                        if self.on_received:
-                            self.on_received(buffer)
-                        logger.debug(buffer.hex(" ").upper())
-                    else:
-                        logger.warning('Incorrect data len')
-            except Empty:
-                try:
-                    rx_data: bytes | None = self._ser.read_all()
-                except SerialException as err:
-                    logger.error(err)
-                    logger.info('Please restart app')
-                    return None
-                if rx_data:
-                    logger.debug(f'got unexpected data: {rx_data.hex(" ").upper()}')
-            except SerialException as err:
-                logger.error(err)
-                logger.info('Please restart app')
-                return None
-            # time.sleep(0.001)
+async def main():
+    start = time.time()
+    for _ in range(10):
+        print((await lm.read(IVar(4, 5, 40), 128)).hex(' ').upper())
+    print(f'{time.time() - start:.3f}')
 
-    def _cli_routine(self) -> None:
-        while self._working_flag:
-            try:
-                data: str = input('> ')
-                if data == 'p':
-                    print(self.pkt_counter)
-            except (SyntaxError, ValueError, EOFError) as err:
-                print(err)
+
+if __name__ == '__main__':
+    lm = USB_CAN_Driver()
+    lm.connect('COM16')
+    asyncio.run(main())
