@@ -7,6 +7,9 @@ class SerialInfo:
     port: str
     serial_num: str
 
+    def __hash__(self) -> int:
+        return (self.port + self.serial_num).__hash__()
+
 
 def get_connected_devices() -> list[SerialInfo]:
     """
