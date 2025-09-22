@@ -2,14 +2,16 @@ import asyncio
 import time
 from serial_client import AioSerialClient
 import struct
-
 from usb_can_driver.canv_structs import CAN_Transaction, IVar
+from loguru import logger
 
 
 class USB_CAN_Driver:
     def __init__(self) -> None:
         self._ser = AioSerialClient()
         self.current_ch: int = 0
+        self.read_amount = 0
+        self.write_amount = 0
 
     def connect(self, port: str) -> bool:
         return self._ser.connect(port)
@@ -34,7 +36,9 @@ class USB_CAN_Driver:
     async def read(self, ivar: IVar, d_len: int = 0,
                    can_num: int = 0) -> bytes:
         self.current_ch = can_num
+        logger.debug(f'CAN Read_{self.read_amount}')
         cmd: CAN_Transaction = self._read(ivar, d_len, can_num)
+        self.read_amount += 1
         return await self._transaction(cmd)
 
     @staticmethod
@@ -56,6 +60,8 @@ class USB_CAN_Driver:
         rx_data: bytes = b''
         for packet in cmd.packets:
             result: bytes = await self._ser.transaction(packet, 16, 1)
+            logger.debug(f"{('W', 'R')[cmd.d_len > 0]} Ch{self.current_ch} | "\
+                         f"{result.hex(' ').upper()}")
             rx_data += result[8:]
             # await asyncio.sleep(0.0001)
         return rx_data
@@ -63,7 +69,9 @@ class USB_CAN_Driver:
     async def write(self, ivar: IVar, data: bytes = b'',
               can_num: int = 0) -> bytes:
         self.current_ch = can_num
+        logger.debug(f'CAN Write_{self.write_amount}')
         cmd: CAN_Transaction = self._write(ivar, data, can_num)
+        self.write_amount += 1
         return await self._transaction(cmd)
 
 
