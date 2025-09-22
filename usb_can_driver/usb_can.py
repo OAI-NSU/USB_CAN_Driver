@@ -9,6 +9,7 @@ from usb_can_driver.canv_structs import CAN_Transaction, IVar
 class USB_CAN_Driver:
     def __init__(self) -> None:
         self._ser = AioSerialClient()
+        self.current_ch: int = 0
 
     def connect(self, port: str) -> bool:
         return self._ser.connect(port)
@@ -32,6 +33,7 @@ class USB_CAN_Driver:
 
     async def read(self, ivar: IVar, d_len: int = 0,
                    can_num: int = 0) -> bytes:
+        self.current_ch = can_num
         cmd: CAN_Transaction = self._read(ivar, d_len, can_num)
         return await self._transaction(cmd)
 
@@ -60,6 +62,7 @@ class USB_CAN_Driver:
 
     async def write(self, ivar: IVar, data: bytes = b'',
               can_num: int = 0) -> bytes:
+        self.current_ch = can_num
         cmd: CAN_Transaction = self._write(ivar, data, can_num)
         return await self._transaction(cmd)
 
