@@ -1,19 +1,18 @@
-[tool.poetry]
+[project]
 name = "usb-can-driver"
 version = "0.1.0"
 description = ""
-authors = ["CrinitusFeles <crinitusfeles@gmail.com>"]
 readme = "README.md"
+dependencies = [
+    "serial-client",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-pyserial = "^3.5"
-loguru = "^0.7.2"
-pydantic = "^2.8.2"
-rich = "^13.7.1"
-serial-client = {git = "https://github.com/CrinitusFeles/SerialClient"}
+[tool.uv.sources]
+serial-client = { git = "https://github.com/CrinitusFeles/SerialClient" }
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["usb_can_driver*"]
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.uv]
+config-settings = { editable_mode = "compat" }
