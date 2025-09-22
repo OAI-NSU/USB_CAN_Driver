@@ -48,7 +48,7 @@ class IVar:
     def _validate(self, val, target_class: Type[Enum]) -> int:
         if isinstance(val, target_class):
             validated = val.value
-        elif 1 <= val <= 15:
+        elif 0 <= val <= 15:
             validated = val
         else:
             raise ValueError(f'Incorrect DevID value: {val}')
