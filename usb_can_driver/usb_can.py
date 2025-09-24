@@ -12,6 +12,7 @@ class USB_CAN_Driver:
         self.current_ch: int = 0
         self.read_amount = 0
         self.write_amount = 0
+        self.tr_timeout: float = 0.1
 
     def connect(self, port: str) -> bool:
         return self._ser.connect(port)
@@ -59,7 +60,8 @@ class USB_CAN_Driver:
     async def _transaction(self, cmd: CAN_Transaction) -> bytes:
         rx_data: bytes = b''
         for packet in cmd.packets:
-            result: bytes = await self._ser.transaction(packet, 16, 1)
+            result: bytes = await self._ser.transaction(packet, 16,
+                                                        self.tr_timeout)
             logger.debug(f"{('W', 'R')[cmd.d_len > 0]} Ch{self.current_ch} | "\
                          f"{result.hex(' ').upper()}")
             rx_data += result[8:]
